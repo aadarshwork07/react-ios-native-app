@@ -1,130 +1,231 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useEffect, useState } from 'react';
+import { SafeAreaView, ScrollView, Text, View, Button, StyleSheet } from 'react-native';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+// Import the broken HealthKit in TypeScript format
+import BrokenHealthKit, { HealthKitPermissions, HealthValue } from 'react-native-health';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+// Fix the module as suggested
+const NativeModules = require('react-native').NativeModules;
+const AppleHealthKit = NativeModules.AppleHealthKit;
+// Copy the Constants from the broken import to preserve type information
+AppleHealthKit.Constants = BrokenHealthKit.Constants;
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+function App() {
+  const [status, setStatus] = useState('Not initialized');
+  const [healthData, setHealthData] = useState({
+    steps: 0,
+    heartRate: [],
+  });
+  const [loading, setLoading] = useState(false);
+  
+  const initializeHealthKit = () => {
+    try {
+      setLoading(true);
+      setStatus('Initializing HealthKit...');
+      
+      const permissions = {
+        permissions: {
+          read: [
+            AppleHealthKit.Constants.Permissions.HeartRate,
+            AppleHealthKit.Constants.Permissions.Steps,
+            AppleHealthKit.Constants.Permissions.SleepAnalysis,
+          ],
+          write: [
+            AppleHealthKit.Constants.Permissions.Steps,
+          ],
+        },
+      };
+      
+      AppleHealthKit.initHealthKit(permissions, (error) => {
+        if (error) {
+          console.log('Error initializing HealthKit:', error);
+          setStatus('Error: ' + error);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('HealthKit initialized successfully');
+        setStatus('HealthKit initialized successfully');
+        setLoading(false);
+      });
+    } catch (error) {
+      console.error('Exception during initialization:', error);
+      setStatus('Exception: ' + error.message);
+      setLoading(false);
+    }
   };
-
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the reccomendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
-
+  
+  const fetchHealthData = () => {
+    try {
+      setLoading(true);
+      setStatus('Fetching health data...');
+      
+      // Get step count
+      const options = {
+        date: new Date().toISOString(),
+      };
+      
+      AppleHealthKit.getStepCount(options, (error, results) => {
+        if (error) {
+          console.log('Error getting step count:', error);
+          setStatus('Error getting step count: ' + error);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Step count results:', results);
+        setHealthData(prevData => ({ ...prevData, steps: results.value || 0 }));
+        
+        // Get heart rate samples
+        const heartRateOptions = {
+          startDate: new Date(new Date().getTime() - 24 * 60 * 60 * 1000).toISOString(), // Last 24 hours
+          endDate: new Date().toISOString(),
+          limit: 10,
+        };
+        
+        AppleHealthKit.getHeartRateSamples(heartRateOptions, (error, results) => {
+          setLoading(false);
+          
+          if (error) {
+            console.log('Error getting heart rate:', error);
+            setStatus('Step count fetched, but error getting heart rate: ' + error);
+            return;
+          }
+          
+          console.log('Heart rate results:', results);
+          setHealthData(prevData => ({ ...prevData, heartRate: results }));
+          setStatus('Health data retrieved successfully');
+        });
+      });
+    } catch (error) {
+      console.error('Exception during data fetch:', error);
+      setStatus('Exception: ' + error.message);
+      setLoading(false);
+    }
+  };
+  
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>HealthKit Integration</Text>
+        
+        <View style={styles.statusContainer}>
+          <Text style={styles.statusLabel}>Status:</Text>
+          <Text style={styles.statusValue}>{status}</Text>
+          {loading && <Text style={styles.loadingText}>Loading...</Text>}
         </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
+        
+        <View style={styles.buttonContainer}>
+          <Button
+            title="Initialize HealthKit"
+            onPress={initializeHealthKit}
+            disabled={loading}
+          />
+          
+          <View style={styles.buttonSpacer} />
+          
+          <Button
+            title="Fetch Health Data"
+            onPress={fetchHealthData}
+            disabled={loading}
+          />
         </View>
+        
+        {healthData.steps > 0 && (
+          <View style={styles.dataContainer}>
+            <Text style={styles.dataTitle}>Step Count</Text>
+            <Text style={styles.dataValue}>{healthData.steps}</Text>
+          </View>
+        )}
+        
+        {healthData.heartRate.length > 0 && (
+          <View style={styles.dataContainer}>
+            <Text style={styles.dataTitle}>Heart Rate Samples</Text>
+            {healthData.heartRate.map((sample, index) => (
+              <View key={index} style={styles.sampleContainer}>
+                <Text style={styles.sampleValue}>{sample.value} BPM</Text>
+                <Text style={styles.sampleDate}>
+                  {new Date(sample.startDate).toLocaleString()}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
-  sectionTitle: {
+  content: {
+    padding: 20,
+  },
+  title: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  sectionDescription: {
-    marginTop: 8,
+  statusContainer: {
+    marginVertical: 20,
+    padding: 15,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  statusLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  statusValue: {
+    fontSize: 16,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontStyle: 'italic',
+    color: '#666',
+  },
+  buttonContainer: {
+    marginVertical: 20,
+  },
+  buttonSpacer: {
+    height: 10,
+  },
+  dataContainer: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#e6f7ff',
+    borderRadius: 8,
+  },
+  dataTitle: {
     fontSize: 18,
-    fontWeight: '400',
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
-  highlight: {
-    fontWeight: '700',
+  dataValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#0066cc',
+  },
+  sampleContainer: {
+    padding: 10,
+    marginVertical: 5,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 5,
+    borderLeftWidth: 3,
+    borderLeftColor: '#0066cc',
+  },
+  sampleValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  sampleDate: {
+    fontSize: 12,
+    color: '#666',
   },
 });
 

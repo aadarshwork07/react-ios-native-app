@@ -13,18 +13,36 @@ class AppDelegate: RCTAppDelegate {
     // They will be passed down to the ViewController used by React Native.
     self.initialProps = [:]
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    
+    // Initialize HealthKit background observers using Objective-C runtime
+    if let bridge = self.bridge {
+      if let healthKitClass = NSClassFromString("RCTAppleHealthKit") {
+        let healthKit = healthKitClass.alloc() as AnyObject
+        let selector = NSSelectorFromString("initializeBackgroundObservers:")
+        if healthKit.responds(to: selector) {
+          healthKit.perform(selector, with: bridge)
+          print("HealthKit background observers initialized successfully")
+        } else {
+          print("HealthKit initialize method not found")
+        }
+      } else {
+        print("RCTAppleHealthKit class not found")
+      }
+    }
+
+    return result
   }
 
   override func sourceURL(for bridge: RCTBridge) -> URL? {
-    self.bundleURL()
+    return self.bundleURL()
   }
 
   override func bundleURL() -> URL? {
-#if DEBUG
-    RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
-#else
-    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
-#endif
+    #if DEBUG
+    return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
+    #else
+    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
+    #endif
   }
 }
